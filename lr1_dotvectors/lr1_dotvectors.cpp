@@ -60,6 +60,16 @@ double dotVectors(vector<double> vec1, vector<double> vec2) {
     return dot;
 }
 
+void printExecutionTime(clk::time_point t0, clk::time_point t1) {
+        // вычисление времени выполнения (миллисекунды)
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+    cout << ms << " мс" << endl;
+
+    // вычисление времени выполнения (микроскунды)
+    auto mcs = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+    cout << mcs << " мкс" << endl;
+}
+
 int main() {
     SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
     SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
@@ -99,21 +109,16 @@ int main() {
     cout << endl;
     */
 
-    auto t0 = clk::now(); // старт измерения времени выполнения
+    clk::time_point t0 = clk::now(); // старт измерения времени выполнения
 
     double result = dotVectors(a, b);
+
+    clk::time_point t1 = clk::now(); // окончание измерения времени выполнения
+
     cout << "Скалярное произведение = " << result << endl;
-
-    auto t1 = clk::now(); // окончание измерения времени выполнения
-
+    cout << endl;
     cout << "Время выполнения скалярного умножения: " << endl;
-    // вычисление времени выполнения (миллисекунды)
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-    cout << ms << " мс" << endl;
-
-    // вычисление времени выполнения (микроскунды)
-    auto mcs = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-    cout << mcs << " мкс" << endl;
+    printExecutionTime(t0, t1);
 
     return 0;
 }
