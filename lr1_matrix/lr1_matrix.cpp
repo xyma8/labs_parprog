@@ -8,12 +8,12 @@ using clk = std::chrono::steady_clock;
 
 
 // Функция генерации матриц n*m размерности
-vector<vector<int>> randomMatrix(size_t n, size_t m, int minVal = -1000, int maxVal = 1000) {
+vector<vector<double>> randomMatrix(size_t n, size_t m, double minVal = -1000.0, double maxVal = 1000.0) {
     random_device rd;
-    mt19937 gen(rd()); // генератор Marsenne Twister
-    normal_distribution<> dist(minVal, maxVal); // нормальное распределение
+    mt19937 gen(12345); // генератор Marsenne Twister
+    uniform_real_distribution<> dist(minVal, maxVal); //
 
-    vector<vector<int>> matrix(n, vector<int>(m, 0)); // n строк, m столбцов, инициализация нулями
+    vector<vector<double>> matrix(n, vector<double>(m, 0.0)); // n строк, m столбцов, инициализация нулями
 
     for (size_t i = 0; i < n; i++) {
         for (size_t j = 0; j < m; j++) {
@@ -25,7 +25,7 @@ vector<vector<int>> randomMatrix(size_t n, size_t m, int minVal = -1000, int max
 }
 
 // Функция нахождения максимального элемента в матрице
-int getMaxMatrix(vector<vector<int>> matrix) {
+int getMaxMatrix(vector<vector<double>> matrix) {
     int max = matrix[0][0];
 
     int n = matrix.size();
@@ -43,6 +43,18 @@ int getMaxMatrix(vector<vector<int>> matrix) {
 }
 
 void printMatrix(vector<vector<int>> matrix) {
+    int n = matrix.size();
+    int m = matrix[0].size();
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            cout << matrix[i][j] << "\t"; // \t = табуляция для выравнивания
+        }
+        cout << endl;
+    }
+}
+
+void printMatrix(vector<vector<double>> matrix) {
     int n = matrix.size();
     int m = matrix[0].size();
 
@@ -84,12 +96,12 @@ int main()
     }
     size_t m = static_cast<size_t>(temp);
 
-    vector<vector<int>> matrix = randomMatrix(n, m);
-    //printMatrix(matrix);
+    vector<vector<double>> matrix = randomMatrix(n, m);
+    printMatrix(matrix);
 
     clk::time_point t0 = clk::now(); // старт измерения времени выполнения
 
-    int result = getMaxMatrix(matrix);
+    double result = getMaxMatrix(matrix);
 
     clk::time_point t1 = clk::now(); // окончание измерения времени выполнения
 
