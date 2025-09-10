@@ -32,8 +32,8 @@ vector<double> readVector() {
 
 // Функция генерации вектора n размерности
 vector<double> randomVector(size_t n, double minVal = -10.0, double maxVal = 10.0) {
-    random_device rd;
-    mt19937 gen(rd()); // генератор Marsenne Twister
+    //random_device rd;
+    mt19937 gen(12345); // генератор Marsenne Twister
     uniform_real_distribution<> dist(minVal, maxVal); // равномерное распределение
 
     vector<double> vec(n); // пустой вектор с указанием размерности

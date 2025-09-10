@@ -3,13 +3,14 @@
 #include <random>
 #include <chrono>
 #include <vector>
+#include <omp.h>
 using namespace std;
 using clk = std::chrono::steady_clock;
 
 
 // Функция генерации матриц n*m размерности
 vector<vector<double>> randomMatrix(size_t n, size_t m, double minVal = -1000.0, double maxVal = 1000.0) {
-    random_device rd;
+    //random_device rd;
     mt19937 gen(12345); // генератор Marsenne Twister
     uniform_real_distribution<> dist(minVal, maxVal); //
 
