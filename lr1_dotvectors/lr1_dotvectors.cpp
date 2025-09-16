@@ -13,7 +13,7 @@ using clk = std::chrono::steady_clock; // устойчив к смене сис�
 // Функция генерации вектора n размерности
 vector<double> randomVector(size_t n, double minVal = -1000.0, double maxVal = 1000.0) {
     random_device rd;
-    mt19937 gen(12345); // генератор Marsenne Twister
+    mt19937 gen(rd()); // генератор Marsenne Twister
     uniform_real_distribution<> dist(minVal, maxVal); // равномерное распределение
 
     vector<double> vec(n); // пустой вектор с указанием размерности
@@ -44,7 +44,7 @@ double dotVectorsParallel(vector<double> vec1, vector<double> vec2) {
     double dot = 0;
     //double localDot = 0;
 
-    #pragma omp parallel for reduction(+:dot)
+    #pragma omp parallel //for reduction(+:dot)
     for (int i = 0; i < vec1.size(); ++i) {
         dot += vec1[i] * vec2[i];
     }
