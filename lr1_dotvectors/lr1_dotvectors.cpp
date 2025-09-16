@@ -11,9 +11,9 @@ using namespace std;
 using clk = std::chrono::steady_clock; // устойчив к смене системного времени
 
 // Функция генерации вектора n размерности
-vector<double> randomVector(size_t n, double minVal = -10.0, double maxVal = 10.0) {
+vector<double> randomVector(size_t n, double minVal = -1000.0, double maxVal = 1000.0) {
     random_device rd;
-    mt19937 gen(rd()); // генератор Marsenne Twister
+    mt19937 gen(12345); // генератор Marsenne Twister
     uniform_real_distribution<> dist(minVal, maxVal); // равномерное распределение
 
     vector<double> vec(n); // пустой вектор с указанием размерности
@@ -63,7 +63,7 @@ double measureExecutionTime(int size, bool isParallel) {
     else {
         double result = dotVectors(a, b);
     }
-    auto t1 = clk::now();
+    auto t1 = clk::now(); // окончание измерения времени
 
     // возвращаем время в микросекундах (мкс)
     return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
@@ -89,24 +89,14 @@ void measureTimeForSizes(int size, int numMeasurements) {
 
     // Вывод результатов
     cout << "Размерность: " << size
-        << " | Последовательный (avg): " << seqAvgTime << " мкс"
-        << " | Параллельный OpenMP (avg): " << parAvgTime << " мкс\n";
-}
-
-void printExecutionTime(clk::time_point t0, clk::time_point t1) {
-    // вычисление времени выполнения (миллисекунды)
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-    cout << ms << " мс" << endl;
-
-    // вычисление времени выполнения (микроскунды)
-    auto mcs = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-    cout << mcs << " мкс" << endl;
+        << " | Последовательный: " << seqAvgTime << " мкс"
+        << " | Параллельный OpenMP: " << parAvgTime << " мкс\n";
 }
 
 int main() {
     SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
     SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
-    //omp_set_num_threads(12);
+    //omp_set_num_threads(8);
     int temp;
 
     cout << "Введите размерность векторов: ";
