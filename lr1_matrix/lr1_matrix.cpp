@@ -12,7 +12,7 @@ using clk = std::chrono::steady_clock;
 vector<vector<double>> randomMatrix(size_t n, size_t m, double minVal = -1000.0, double maxVal = 1000.0) {
     //random_device rd;
     mt19937 gen(12345); // генератор Marsenne Twister
-    uniform_real_distribution<> dist(minVal, maxVal); //
+    normal_distribution<> dist(minVal, maxVal); //
 
     vector<vector<double>> matrix(n, vector<double>(m, 0.0)); // n строк, m столбцов, инициализация нулями
 
@@ -26,36 +26,52 @@ vector<vector<double>> randomMatrix(size_t n, size_t m, double minVal = -1000.0,
 }
 
 // Функция нахождения максимального элемента в матрице
-int getMaxMatrix(vector<vector<double>> matrix) {
-    int max = matrix[0][0];
+double getMaxMatrix(vector<vector<double>> matrix) {
+    double maxv = -numeric_limits<double>::infinity();
 
     int n = matrix.size();
     int m = matrix[0].size();
-
-    for (size_t i = 0; i < n; i++) {
-        for (size_t j = 0; j < m; j++) {
-            if (matrix[i][j] > max) {
-                max = matrix[i][j];
+    std::cerr << "threads=" << omp_get_num_threads() << "\n";
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            if (matrix[i][j] > maxv) {
+                maxv = matrix[i][j];
             }
         }
     }
 
-    return max;
+    return maxv;
 }
 
-void printMatrix(vector<vector<int>> matrix) {
+double getMaxMatrixParallel(vector<vector<double>> matrix) {
+    double maxv = -numeric_limits<double>::infinity();
+
     int n = matrix.size();
     int m = matrix[0].size();
 
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
-            cout << matrix[i][j] << "\t"; // \t = табуляция для выравнивания
+    #pragma omp parallel
+    {
+        double localMaxv = -numeric_limits<double>::infinity();
+
+        #pragma omp for nowait
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < m; ++j) {
+                if (matrix[i][j] > localMaxv) {
+                    localMaxv = matrix[i][j];
+                }
+            }
         }
-        cout << endl;
+
+        #pragma omp critical
+        {
+            if (localMaxv > maxv) maxv = localMaxv;
+        }
     }
+
+    return maxv;
 }
 
-void printMatrix(vector<vector<double>> matrix) {
+static void printMatrix(vector<vector<double>> matrix) {
     int n = matrix.size();
     int m = matrix[0].size();
 
@@ -98,7 +114,7 @@ int main()
     size_t m = static_cast<size_t>(temp);
 
     vector<vector<double>> matrix = randomMatrix(n, m);
-    printMatrix(matrix);
+    //printMatrix(matrix);
 
     clk::time_point t0 = clk::now(); // старт измерения времени выполнения
 
@@ -111,5 +127,7 @@ int main()
     cout << "Время выполнения функции нахождения макс. элемента: " << endl;
     printExecutionTime(t0, t1);
 
+    
     return 0;
+
 }

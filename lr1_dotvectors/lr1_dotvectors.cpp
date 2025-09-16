@@ -6,38 +6,18 @@
 #include <string>
 #include <random>
 #include <chrono>
+#include <omp.h>
 using namespace std;
 using clk = std::chrono::steady_clock; // устойчив к смене системного времени
 
-// Функция считывания вектора из вводимой строки
-vector<double> readVector() {
-    string line;
-    getline(cin, line); //читаем всю строку
-    stringstream ss(line);
-
-    vector<double> vec;
-    string token;
-    while (ss >> token) {
-        try {
-            double num = stod(token); // конвертирование строки в double
-            vec.push_back(num);
-        }
-        catch (const invalid_argument&) {
-            cerr << "'" << token << "'" << " не число" << endl;
-        }
-    }
-
-    return vec;
-}
-
 // Функция генерации вектора n размерности
 vector<double> randomVector(size_t n, double minVal = -10.0, double maxVal = 10.0) {
-    //random_device rd;
-    mt19937 gen(12345); // генератор Marsenne Twister
+    random_device rd;
+    mt19937 gen(rd()); // генератор Marsenne Twister
     uniform_real_distribution<> dist(minVal, maxVal); // равномерное распределение
 
     vector<double> vec(n); // пустой вектор с указанием размерности
-    for (size_t i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; ++i) {
         vec[i] = dist(gen);
     }
 
@@ -53,15 +33,68 @@ double dotVectors(vector<double> vec1, vector<double> vec2) {
 
     double dot = 0;
 
-    for (size_t i = 0; i < vec1.size(); i++) {
+    for (size_t i = 0; i < vec1.size(); ++i) {
         dot += vec1[i] * vec2[i];
     }
 
     return dot;
 }
 
+double dotVectorsParallel(vector<double> vec1, vector<double> vec2) {
+    double dot = 0;
+    //double localDot = 0;
+
+    #pragma omp parallel for reduction(+:dot)
+    for (int i = 0; i < vec1.size(); ++i) {
+        dot += vec1[i] * vec2[i];
+    }
+
+    return dot;
+}
+
+double measureExecutionTime(int size, bool isParallel) {
+    vector<double> a = randomVector(size);
+    vector<double> b = randomVector(size);
+
+    auto t0 = clk::now(); // старт измерения времени выполнения
+    if (isParallel) {
+        double result = dotVectorsParallel(a, b);
+    }
+    else {
+        double result = dotVectors(a, b);
+    }
+    auto t1 = clk::now();
+
+    // возвращаем время в микросекундах (мкс)
+    return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+}
+
+void measureTimeForSizes(int size, int numMeasurements) {
+    double seqTotalTime = 0;
+    double parTotalTime = 0;
+
+    // Многократные замеры для последовательного алгоритма
+    for (int i = 0; i < numMeasurements; ++i) {
+        seqTotalTime += measureExecutionTime(size, false);
+    }
+
+    // Многократные замеры для параллельного алгоритма
+    for (int i = 0; i < numMeasurements; ++i) {
+        parTotalTime += measureExecutionTime(size, true);
+    }
+
+    // Среднее время для каждого из вариантов
+    double seqAvgTime = seqTotalTime / numMeasurements;
+    double parAvgTime = parTotalTime / numMeasurements;
+
+    // Вывод результатов
+    cout << "Размерность: " << size
+        << " | Последовательный (avg): " << seqAvgTime << " мкс"
+        << " | Параллельный OpenMP (avg): " << parAvgTime << " мкс\n";
+}
+
 void printExecutionTime(clk::time_point t0, clk::time_point t1) {
-        // вычисление времени выполнения (миллисекунды)
+    // вычисление времени выполнения (миллисекунды)
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
     cout << ms << " мс" << endl;
 
@@ -73,52 +106,24 @@ void printExecutionTime(clk::time_point t0, clk::time_point t1) {
 int main() {
     SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
     SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
-
-    /*
-    cout << "Введите первый вектор через пробел: ";
-    vector<double> a = readVector();
-
-    cout << "Введите второй вектор через пробел: ";
-    vector<double> b = readVector();
-    */
-
+    //omp_set_num_threads(12);
     int temp;
+
     cout << "Введите размерность векторов: ";
     if (!(cin >> temp) || temp <= 0) {
         cerr << "Ошибка: размерность должна быть положительным числом" << endl;
         return 1;
     }
-
     size_t n = static_cast<size_t>(temp);
 
-    vector<double> a = randomVector(n);
-    /*
-    cout << "Вектор a = ";
-    for (double x : a) {
-        cout << x << ", ";
+    cout << "Введите количество прогонов: ";
+    if (!(cin >> temp) || temp <= 0) {
+        cerr << "Ошибка: кол-во прогонов должно быть положительным числом" << endl;
+        return 1;
     }
-    cout << endl;
-    */
+    size_t numMeasurements = static_cast<size_t>(temp);
 
-    vector<double> b = randomVector(n);
-    /*
-    cout << "Вектор b = ";
-    for (double x : a) {
-        cout << x << ", ";
-    }
-    cout << endl;
-    */
-
-    clk::time_point t0 = clk::now(); // старт измерения времени выполнения
-
-    double result = dotVectors(a, b);
-
-    clk::time_point t1 = clk::now(); // окончание измерения времени выполнения
-
-    cout << "Скалярное произведение = " << result << endl;
-    cout << endl;
-    cout << "Время выполнения скалярного умножения: " << endl;
-    printExecutionTime(t0, t1);
+    measureTimeForSizes(n, numMeasurements);
 
     return 0;
 }
