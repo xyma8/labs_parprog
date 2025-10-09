@@ -16,8 +16,8 @@ vector<vector<double>> randomMatrix(size_t n, size_t m, double minVal = -1000.0,
 
     vector<vector<double>> matrix(n, vector<double>(m, 0.0)); // n строк, m столбцов, инициализация нулями
 
-    for (size_t i = 0; i < n; i++) {
-        for (size_t j = 0; j < m; j++) {
+    for (size_t i = 0; i < n; ++i) {
+        for (size_t j = 0; j < m; ++j) {
             matrix[i][j] = dist(gen);
         }
     }
@@ -31,7 +31,7 @@ double getMaxMatrix(vector<vector<double>> matrix) {
 
     int n = matrix.size();
     int m = matrix[0].size();
-    std::cerr << "threads=" << omp_get_num_threads() << "\n";
+
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < m; j++) {
             if (matrix[i][j] > maxv) {
@@ -43,54 +43,43 @@ double getMaxMatrix(vector<vector<double>> matrix) {
     return maxv;
 }
 
-double getMaxMatrixParallel(vector<vector<double>> matrix) {
-    double maxv = -numeric_limits<double>::infinity();
 
-    int n = matrix.size();
-    int m = matrix[0].size();
+double measureExecutionTime(int n, int m) {
+    vector<vector<double>> matrix = randomMatrix(n, m);
 
-    #pragma omp parallel
-    {
-        double localMaxv = -numeric_limits<double>::infinity();
+    auto t0 = clk::now(); // старт измерения времени выполнения
 
-        #pragma omp for nowait
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < m; ++j) {
-                if (matrix[i][j] > localMaxv) {
-                    localMaxv = matrix[i][j];
-                }
-            }
-        }
+    double result = getMaxMatrix(matrix);
 
-        #pragma omp critical
-        {
-            if (localMaxv > maxv) maxv = localMaxv;
-        }
-    }
+    auto t1 = clk::now(); // окончание измерения времени
 
-    return maxv;
+    // возвращаем время в микросекундах (мкс)
+    return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 }
 
-static void printMatrix(vector<vector<double>> matrix) {
-    int n = matrix.size();
-    int m = matrix[0].size();
+void measureTimeForSizes(int n, int m, int numMeasurements) {
+    double seqTotalTime = 0;
+    double parTotalTime = 0;
 
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
-            cout << matrix[i][j] << "\t"; // \t = табуляция для выравнивания
-        }
-        cout << endl;
+    // Многократные замеры для последовательного алгоритма
+    for (int i = 0; i < numMeasurements; ++i) {
+        seqTotalTime += measureExecutionTime(n, m);
     }
-}
 
-void printExecutionTime(clk::time_point t0, clk::time_point t1) {
-    // вычисление времени выполнения (миллисекунды)
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-    cout << ms << " мс" << endl;
+    #pragma omp parallel for
+    // Многократные замеры для параллельного алгоритма
+    for (int i = 0; i < numMeasurements; ++i) {
+        parTotalTime += measureExecutionTime(n, m);
+    }
 
-    // вычисление времени выполнения (микроскунды)
-    auto mcs = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-    cout << mcs << " мкс" << endl;
+    // Среднее время для каждого из вариантов
+    double seqAvgTime = seqTotalTime / numMeasurements;
+    double parAvgTime = parTotalTime / numMeasurements;
+
+    // Вывод результатов
+    cout << "Размерность: " << n <<" x "<<m
+        << " | Последовательный: " << seqAvgTime << " мкс"
+        << " | Параллельный OpenMP: " << parAvgTime << " мкс\n";
 }
 
 int main()
@@ -113,19 +102,14 @@ int main()
     }
     size_t m = static_cast<size_t>(temp);
 
-    vector<vector<double>> matrix = randomMatrix(n, m);
-    //printMatrix(matrix);
+    cout << "Введите количество прогонов: ";
+    if (!(cin >> temp) || temp <= 0) {
+        cerr << "Ошибка: кол-во прогонов должно быть положительным числом" << endl;
+        return 1;
+    }
+    size_t numMeasurements = static_cast<size_t>(temp);
 
-    clk::time_point t0 = clk::now(); // старт измерения времени выполнения
-
-    double result = getMaxMatrix(matrix);
-
-    clk::time_point t1 = clk::now(); // окончание измерения времени выполнения
-
-    cout << "Максимальный элемент матрицы = " << result << endl;
-    cout << endl;
-    cout << "Время выполнения функции нахождения макс. элемента: " << endl;
-    printExecutionTime(t0, t1);
+    measureTimeForSizes(n,m, numMeasurements);
 
     
     return 0;

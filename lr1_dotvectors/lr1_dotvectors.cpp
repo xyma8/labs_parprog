@@ -1,9 +1,6 @@
-﻿
-#include <iostream>
+﻿#include <iostream>
 #include <Windows.h>
 #include <vector>
-#include <sstream>
-#include <string>
 #include <random>
 #include <chrono>
 #include <omp.h>
@@ -40,27 +37,14 @@ double dotVectors(vector<double> vec1, vector<double> vec2) {
     return dot;
 }
 
-double dotVectorsParallel(vector<double> vec1, vector<double> vec2) {
-    double dot = 0;
-
-    for (int i = 0; i < vec1.size(); ++i) {
-        dot += vec1[i] * vec2[i];
-    }
-
-    return dot;
-}
-
-double measureExecutionTime(int size, bool isParallel) {
+double measureExecutionTime(int size) {
     vector<double> a = randomVector(size);
     vector<double> b = randomVector(size);
 
     auto t0 = clk::now(); // старт измерения времени выполнения
-    if (isParallel) {
-        double result = dotVectorsParallel(a, b);
-    }
-    else {
-        double result = dotVectors(a, b);
-    }
+
+    double result = dotVectors(a, b);
+
     auto t1 = clk::now(); // окончание измерения времени
 
     // возвращаем время в микросекундах (мкс)
@@ -73,13 +57,13 @@ void measureTimeForSizes(int size, int numMeasurements) {
 
     // Многократные замеры для последовательного алгоритма
     for (int i = 0; i < numMeasurements; ++i) {
-        seqTotalTime += measureExecutionTime(size, false);
+        seqTotalTime += measureExecutionTime(size);
     }
 
     #pragma omp parallel for
     // Многократные замеры для параллельного алгоритма
     for (int i = 0; i < numMeasurements; ++i) {
-        parTotalTime += measureExecutionTime(size, true);
+        parTotalTime += measureExecutionTime(size);
     }
 
     // Среднее время для каждого из вариантов
