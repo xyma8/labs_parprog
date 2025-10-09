@@ -23,13 +23,13 @@ vector<double> randomVector(size_t n, double minVal = -1000.0, double maxVal = 1
 }
 
 // Функция вычисления скалярного произведения двух векторов
-double dotVectors(vector<double> vec1, vector<double> vec2) {
+double dotVectors(vector<double>& vec1, vector<double>& vec2) {
     if (vec1.size() != vec2.size()) {
         cout << "Ошибка: векторы разной размерности" << endl;
         //throw invalid_argument("Векторы разной размерности");
     }
 
-    double dot = 0;
+    double dot = 0.0;
 
     for (size_t i = 0; i < vec1.size(); ++i) {
         dot += vec1[i] * vec2[i];
@@ -38,35 +38,18 @@ double dotVectors(vector<double> vec1, vector<double> vec2) {
     return dot;
 }
 
-// Функция вычисления скалярного произведения двух векторов
-double dotVectorsParallel(vector<double> vec1, vector<double> vec2) {
 
-    double dot = 0.0;
-
-    #pragma omp for
-    for (int i = 0; i < vec1.size(); ++i) {
-        dot += vec1[i] * vec2[i];
-    }
-
-    return dot;
-}
-
-double measureExecutionTime(int size, double isParallel, vector<double> vecA, vector<double> vecB) {
+double measureExecutionTime(int size, vector<double>& vecA, vector<double>& vecB) {
     //vector<double> a = randomVector(size);
     //vector<double> b = randomVector(size);
     #pragma omp barrier
 
     auto t0 = clk::now(); // старт измерения времени выполнения
-
-    if (isParallel) {
-        double result = dotVectorsParallel(vecA, vecB);
-    }
-    else {
-        double result = dotVectors(vecA, vecB);
-    }
-
+    double result = dotVectors(vecA, vecB);
     auto t1 = clk::now(); // окончание измерения времени
 
+    static volatile double sink; // защищаем от выкидывания
+    sink = result;
     // возвращаем время в микросекундах (мкс)
     return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 }
@@ -79,55 +62,46 @@ void measureTimeForSizes(int size, int numMeasurements) {
     for (int i = 0; i < numMeasurements; ++i) {
         vector<double> a = randomVector(size);
         vector<double> b = randomVector(size);
-        seqTotalTime += measureExecutionTime(size, false, a, b);
+        seqTotalTime += measureExecutionTime(size, a, b);
     }
 
     vector<double> vec1;
     vector<double> vec2;
+    double t0 = 0.0; // ОБЩЕЕ для всех потоков
+    double dot = 0.0;
     #pragma omp parallel
     {
         // Многократные замеры для параллельного алгоритма
         for (int i = 0; i < numMeasurements; ++i) {
             #pragma omp barrier
-            //double t0;
+
             #pragma omp single
             {
                 vec1 = randomVector(size);
                 vec2 = randomVector(size);
-                //t0 = omp_get_wtime();
-                //t0 = clk::now(); // старт измерения времени выполнения
+                t0 = omp_get_wtime();
             }
             #pragma omp barrier  // все увидят готовые vec1/vec2
-            //clk::time_point t0;
-            double t0;
-            t0 = omp_get_wtime();
-            //t0 = clk::now(); // старт измерения времени выполнения
-            double dot = 0.0;
 
-            #pragma omp for
+            #pragma omp for reduction(+:dot)
             for (int i = 0; i < vec1.size(); ++i) {
                 dot += vec1[i] * vec2[i];
             }
 
-            //double dt;
+            #pragma omp barrier
             #pragma omp single
             {
-                //auto t1 = clk::now(); // окончание измерения времени
-                //double dt = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-                double dt = (omp_get_wtime() - t0) * 1e6;
-                //cout << dt <<" ";
+                double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для мкс
                 parTotalTime += dt;
-                //sink += dot; // предотвращаем DCE
+                static volatile double sink; sink = dot; // не даём выкинуть
             }
-
-            //parTotalTime += measureExecutionTime(size, true,a,b);
         }
     }
 
 
     // Среднее время для каждого из вариантов
     double seqAvgTime = seqTotalTime / numMeasurements;
-    double parAvgTime = parTotalTime;
+    double parAvgTime = parTotalTime / numMeasurements;
 
     // Вывод результатов
     cout << "Размерность: " << size
@@ -157,7 +131,6 @@ int main() {
         return 1;
     }
     size_t numMeasurements = static_cast<size_t>(temp);
-
     measureTimeForSizes(n, numMeasurements);
 
     return 0;
