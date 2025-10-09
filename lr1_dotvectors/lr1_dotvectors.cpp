@@ -10,8 +10,8 @@ using clk = std::chrono::steady_clock; // устойчив к смене сис�
 
 // Функция генерации вектора n размерности
 vector<double> randomVector(size_t n, double minVal = -1000.0, double maxVal = 1000.0) {
-    random_device rd;
-    mt19937 gen(rd()); // генератор Marsenne Twister
+    //random_device rd;
+    mt19937 gen(12345); // генератор Marsenne Twister
     uniform_real_distribution<> dist(minVal, maxVal); // равномерное распределение
 
     vector<double> vec(n); // пустой вектор с указанием размерности
@@ -39,7 +39,7 @@ double dotVectors(vector<double>& vec1, vector<double>& vec2) {
 }
 
 
-double measureExecutionTime(int size, vector<double>& vecA, vector<double>& vecB) {
+double measureExecTime(int size, vector<double>& vecA, vector<double>& vecB) {
     //vector<double> a = randomVector(size);
     //vector<double> b = randomVector(size);
     #pragma omp barrier
@@ -50,8 +50,45 @@ double measureExecutionTime(int size, vector<double>& vecA, vector<double>& vecB
 
     static volatile double sink; // защищаем от выкидывания
     sink = result;
+
     // возвращаем время в микросекундах (мкс)
     return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+}
+
+void measureExecTimeParallel(int size,
+    int numMeasurements,
+    vector<double>& vecA,
+    vector<double>& vecB,
+    double& parTotalTime) {
+
+    // Многократные замеры для параллельного(без оптимизации) алгоритма
+    for (int i = 0; i < numMeasurements; ++i) {
+        double t0_local = 0.0; // локальная метка времени
+
+        #pragma omp barrier
+        #pragma omp single
+        {
+            vecA = randomVector(size);
+            vecB = randomVector(size);
+            t0_local = omp_get_wtime();
+        }
+        #pragma omp barrier  // все увидят готовые vec1/vec2
+
+        double dot_local = 0.0;
+        #pragma omp for reduction(+:dot_local)
+        for (int i = 0; i < vecA.size(); ++i) {
+            dot_local += vecA[i] * vecB[i];
+        }
+
+        #pragma omp barrier
+        #pragma omp single
+        {
+            double dt = (omp_get_wtime() - t0_local) * 1e6; // умножаем для микросекунд
+            parTotalTime += dt;
+            static volatile double sink; sink = dot_local; // не даём выкинуть
+        }
+    }
+    
 }
 
 void measureTimeForSizes(int size, int numMeasurements) {
@@ -62,40 +99,16 @@ void measureTimeForSizes(int size, int numMeasurements) {
     for (int i = 0; i < numMeasurements; ++i) {
         vector<double> a = randomVector(size);
         vector<double> b = randomVector(size);
-        seqTotalTime += measureExecutionTime(size, a, b);
+        seqTotalTime += measureExecTime(size, a, b);
     }
 
     vector<double> vec1;
     vector<double> vec2;
-    double t0 = 0.0; // ОБЩЕЕ для всех потоков
+    double t0 = 0.0; // ОБЩЕЕ для всех потоков (время)
     double dot = 0.0;
     #pragma omp parallel
     {
-        // Многократные замеры для параллельного алгоритма
-        for (int i = 0; i < numMeasurements; ++i) {
-            #pragma omp barrier
-
-            #pragma omp single
-            {
-                vec1 = randomVector(size);
-                vec2 = randomVector(size);
-                t0 = omp_get_wtime();
-            }
-            #pragma omp barrier  // все увидят готовые vec1/vec2
-
-            #pragma omp for reduction(+:dot)
-            for (int i = 0; i < vec1.size(); ++i) {
-                dot += vec1[i] * vec2[i];
-            }
-
-            #pragma omp barrier
-            #pragma omp single
-            {
-                double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для мкс
-                parTotalTime += dt;
-                static volatile double sink; sink = dot; // не даём выкинуть
-            }
-        }
+        measureExecTimeParallel(size, numMeasurements, vec1, vec2, parTotalTime);
     }
 
 
