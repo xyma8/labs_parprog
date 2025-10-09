@@ -1,4 +1,5 @@
-﻿#include <iostream>
+﻿
+#include <iostream>
 #include <Windows.h>
 #include <vector>
 #include <random>
@@ -37,13 +38,32 @@ double dotVectors(vector<double> vec1, vector<double> vec2) {
     return dot;
 }
 
-double measureExecutionTime(int size) {
-    vector<double> a = randomVector(size);
-    vector<double> b = randomVector(size);
+// Функция вычисления скалярного произведения двух векторов
+double dotVectorsParallel(vector<double> vec1, vector<double> vec2) {
+
+    double dot = 0.0;
+
+    #pragma omp for
+    for (int i = 0; i < vec1.size(); ++i) {
+        dot += vec1[i] * vec2[i];
+    }
+
+    return dot;
+}
+
+double measureExecutionTime(int size, double isParallel, vector<double> vecA, vector<double> vecB) {
+    //vector<double> a = randomVector(size);
+    //vector<double> b = randomVector(size);
+    #pragma omp barrier
 
     auto t0 = clk::now(); // старт измерения времени выполнения
 
-    double result = dotVectors(a, b);
+    if (isParallel) {
+        double result = dotVectorsParallel(vecA, vecB);
+    }
+    else {
+        double result = dotVectors(vecA, vecB);
+    }
 
     auto t1 = clk::now(); // окончание измерения времени
 
@@ -57,14 +77,44 @@ void measureTimeForSizes(int size, int numMeasurements) {
 
     // Многократные замеры для последовательного алгоритма
     for (int i = 0; i < numMeasurements; ++i) {
-        seqTotalTime += measureExecutionTime(size);
+        vector<double> a = randomVector(size);
+        vector<double> b = randomVector(size);
+        seqTotalTime += measureExecutionTime(size, false, a, b);
     }
 
-    #pragma omp parallel for
-    // Многократные замеры для параллельного алгоритма
-    for (int i = 0; i < numMeasurements; ++i) {
-        parTotalTime += measureExecutionTime(size);
+    vector<double> vec1;
+    vector<double> vec2;
+    #pragma omp parallel
+    {
+        // Многократные замеры для параллельного алгоритма
+        for (int i = 0; i < numMeasurements; ++i) {
+            #pragma omp barrier
+            double t0;
+            #pragma omp single
+            {
+                vec1 = randomVector(size);
+                vec2 = randomVector(size);
+                t0 = omp_get_wtime();
+            }
+            #pragma omp barrier  // все увидят готовые vec1/vec2
+
+            double dot = 0.0;
+
+            #pragma omp for
+            for (int i = 0; i < vec1.size(); ++i) {
+                dot += vec1[i] * vec2[i];
+            }
+
+            #pragma omp single
+            {
+                double dt = (omp_get_wtime() - t0) * 1e6; // умножением перевод в микросекунды
+                parTotalTime += dt;
+            }
+
+            //parTotalTime += measureExecutionTime(size, true,a,b);
+        }
     }
+
 
     // Среднее время для каждого из вариантов
     double seqAvgTime = seqTotalTime / numMeasurements;
@@ -79,7 +129,9 @@ void measureTimeForSizes(int size, int numMeasurements) {
 int main() {
     SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
     SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
-    //omp_set_num_threads(8);
+
+    // фиксируем число потоков/расписание, чтобы измерения были стабильны
+    omp_set_num_threads(omp_get_max_threads());
     int temp;
 
     cout << "Введите размерность векторов: ";
