@@ -42,9 +42,7 @@ double dotVectors(vector<double> vec1, vector<double> vec2) {
 
 double dotVectorsParallel(vector<double> vec1, vector<double> vec2) {
     double dot = 0;
-    //double localDot = 0;
 
-    #pragma omp parallel //for reduction(+:dot)
     for (int i = 0; i < vec1.size(); ++i) {
         dot += vec1[i] * vec2[i];
     }
@@ -78,6 +76,7 @@ void measureTimeForSizes(int size, int numMeasurements) {
         seqTotalTime += measureExecutionTime(size, false);
     }
 
+    #pragma omp parallel for
     // Многократные замеры для параллельного алгоритма
     for (int i = 0; i < numMeasurements; ++i) {
         parTotalTime += measureExecutionTime(size, true);
