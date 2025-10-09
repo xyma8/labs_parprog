@@ -89,15 +89,19 @@ void measureTimeForSizes(int size, int numMeasurements) {
         // Многократные замеры для параллельного алгоритма
         for (int i = 0; i < numMeasurements; ++i) {
             #pragma omp barrier
-            double t0;
+            //double t0;
             #pragma omp single
             {
                 vec1 = randomVector(size);
                 vec2 = randomVector(size);
-                t0 = omp_get_wtime();
+                //t0 = omp_get_wtime();
+                //t0 = clk::now(); // старт измерения времени выполнения
             }
             #pragma omp barrier  // все увидят готовые vec1/vec2
-
+            //clk::time_point t0;
+            double t0;
+            t0 = omp_get_wtime();
+            //t0 = clk::now(); // старт измерения времени выполнения
             double dot = 0.0;
 
             #pragma omp for
@@ -105,10 +109,15 @@ void measureTimeForSizes(int size, int numMeasurements) {
                 dot += vec1[i] * vec2[i];
             }
 
+            //double dt;
             #pragma omp single
             {
-                double dt = (omp_get_wtime() - t0) * 1e6; // умножением перевод в микросекунды
+                //auto t1 = clk::now(); // окончание измерения времени
+                //double dt = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                double dt = (omp_get_wtime() - t0) * 1e6;
+                //cout << dt <<" ";
                 parTotalTime += dt;
+                //sink += dot; // предотвращаем DCE
             }
 
             //parTotalTime += measureExecutionTime(size, true,a,b);
@@ -118,7 +127,7 @@ void measureTimeForSizes(int size, int numMeasurements) {
 
     // Среднее время для каждого из вариантов
     double seqAvgTime = seqTotalTime / numMeasurements;
-    double parAvgTime = parTotalTime / numMeasurements;
+    double parAvgTime = parTotalTime;
 
     // Вывод результатов
     cout << "Размерность: " << size
@@ -131,6 +140,7 @@ int main() {
     SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
 
     // фиксируем число потоков/расписание, чтобы измерения были стабильны
+    omp_set_dynamic(0);
     omp_set_num_threads(omp_get_max_threads());
     int temp;
 
