@@ -82,17 +82,17 @@ void measureTimeForSizes(int size, int numMeasurements) {
                 vec2 = randomVector(size);
                 t0 = omp_get_wtime();
             }
-            #pragma omp barrier  // все увидят готовые vec1/vec2
+            //#pragma omp barrier  // все увидят готовые vec1/vec2
 
             #pragma omp for reduction(+:dot)
             for (int i = 0; i < vec1.size(); ++i) {
                 dot += vec1[i] * vec2[i];
             }
 
-            #pragma omp barrier
+            //#pragma omp barrier
             #pragma omp single
             {
-                double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для мкс
+                double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
                 parTotalTime += dt;
                 static volatile double sink; sink = dot; // не даём выкинуть
             }
@@ -114,7 +114,7 @@ int main() {
     SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
     SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
 
-    // фиксируем число потоков/расписание, чтобы измерения были стабильны
+    // фиксируем число потоков, чтобы измерения были стабильны
     omp_set_dynamic(0);
     omp_set_num_threads(omp_get_max_threads());
     int temp;
