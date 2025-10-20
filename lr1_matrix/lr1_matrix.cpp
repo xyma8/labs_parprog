@@ -25,6 +25,27 @@ vector<vector<double>> randomMatrix(size_t n, size_t m, unsigned int seed = 1234
     return matrix;
 }
 
+vector<double> randomMatrixFlat(size_t n, size_t m,
+    unsigned int seed = 12345,
+    double minVal = -1000.0, double maxVal = 1000.0)
+{
+    mt19937 gen(seed);
+    cout << "Генератор матрицы (seed) = " << seed << endl;
+
+    uniform_real_distribution<> dist(minVal, maxVal); // равномерное распределение
+
+    vector<double> matrix(n * m);
+
+    for (size_t i = 0; i < n * m; ++i)
+        matrix[i] = dist(gen);
+
+    return matrix;
+}
+
+inline double& at(vector<double>& mat, size_t ncols, size_t i, size_t j) {
+    return mat[i * ncols + j];
+}
+
 pair<size_t, size_t> getMatrixSize(const vector<vector<double>>& matrix) {
     size_t rows = matrix.size();
     size_t cols = matrix.empty() ? 0 : matrix[0].size();
@@ -49,47 +70,38 @@ double getMaxMatrix(vector<vector<double>>& matrix) {
     return maxv;
 }
 
-/*
-double measureExecutionTime(vector<vector<double>>& matrix) {
-    //vector<vector<double>> matrix = randomMatrix(n, m);
 
-    auto t0 = clk::now(); // старт измерения времени выполнения
-    double result = getMaxMatrix(matrix);
-    auto t1 = clk::now(); // окончание измерения времени
-
-    static volatile double sink; // защищаем от выкидывания
-    sink = result;
-
-    // возвращаем время в микросекундах (мкс)
-    return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-}
-*/
-
-void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
+void measureTimeSeq(vector<double>& matrix, int numMeasurements) {
     double seqTotalTime = 0;
-    double result;
+    //double result;
+
+    double maxv = -numeric_limits<double>::infinity();
     // Многократные замеры для последовательного алгоритма
     for (int i = 0; i < numMeasurements; ++i) {
         auto t0 = clk::now(); // старт измерения времени выполнения
-        result = getMaxMatrix(matrix);
+        //result = getMaxMatrix(matrix);
+        for (size_t i = 0; i < matrix.size(); ++i)
+            maxv = maxv > matrix[i] ? maxv : matrix[i];
+
         auto t1 = clk::now(); // окончание измерения времени
 
         static volatile double sink; // защищаем от выкидывания
-        sink = result;
+        //sink = result;
+        sink - maxv;
 
         double dt = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
         seqTotalTime += dt;
     }
 
     double seqAvgTime = seqTotalTime / numMeasurements;
-    cout << " | Последовательный: " << seqAvgTime << " мкс; " << "max=" << result << endl;
+    cout << " | Последовательный: " << seqAvgTime << " мкс; " << "max=" << maxv << endl;
 }
 
-void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
+void measureTimePar(vector<double>& matrix, int numMeasurements) {
     double parTotalTime = 0;
     double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double maxv = -numeric_limits<double>::infinity();
-    pair<size_t, size_t> size = getMatrixSize(matrix);
+    //pair<size_t, size_t> size = getMatrixSize(matrix);
 
     #pragma omp parallel
     {
@@ -103,6 +115,7 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
             }
 
             double local_max = maxv;
+            /*
             #pragma omp for
             for (int i = 0; i < size.first; i++) {
                 for (int j = 0; j < size.second; j++) {
@@ -110,6 +123,11 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
                         local_max = matrix[i][j];
                     }
                 }
+            }
+            */
+
+            for (int i = 0; i < matrix.size(); i++) {
+                local_max = local_max > matrix[i] ? maxv : matrix[i];
             }
 
             #pragma omp critical
@@ -128,11 +146,12 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     cout << " | Параллельный OpenMP: " << parAvgTime << " мкс; " << "max=" << maxv << endl;
 }
 
-void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
+void measureTimeParOpt(vector<double>& matrix, int numMeasurements) {
     double parTotalTimeOpt = 0;
     double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double maxv = -numeric_limits<double>::infinity();
-    pair<size_t, size_t> size = getMatrixSize(matrix);
+    //pair<size_t, size_t> size = getMatrixSize(matrix);
+
 
     #pragma omp parallel
     {
@@ -145,6 +164,7 @@ void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
                 t0 = omp_get_wtime();
             }
 
+            /*
             #pragma omp for reduction(max:maxv) schedule(static)
             for (int i = 0; i < size.first; i++) {
                 #pragma omp simd reduction(max:maxv)
@@ -154,7 +174,11 @@ void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
                     }
                 }
             }
-
+            */
+            #pragma omp parallel for reduction(max:maxv) schedule(static)
+            for (int i = 0; i < matrix.size(); i++) {
+                maxv = maxv > matrix[i] ? maxv : matrix[i];
+            }
             #pragma omp single
             {
                 double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
@@ -202,12 +226,12 @@ int main()
 
     //cout << "Размерность матрицы: " << n << " x " << m << endl;
     random_device rd;
-    vector<vector<double>> matrix = randomMatrix(n, m, rd());
-
+    //vector<vector<double>> matrix = randomMatrix(n, m, rd());
+    vector<double> matrixFlat = randomMatrixFlat(n, m, rd());
     cout <<endl << "Результаты " << numMeasurements << " прогонов" << " по алгоритмам:" << endl;
-    measureTimeSeq(matrix, numMeasurements);
-    measureTimePar(matrix, numMeasurements);
-    measureTimeParOpt(matrix, numMeasurements);
+    measureTimeSeq(matrixFlat, numMeasurements);
+    measureTimePar(matrixFlat, numMeasurements);
+    measureTimeParOpt(matrixFlat, numMeasurements);
     return 0;
 
 }
