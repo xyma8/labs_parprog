@@ -5,13 +5,13 @@
 #include <random>
 #include <chrono>
 #include <omp.h>
+#include <iomanip>  // для setw, left, right
 using namespace std;
 using clk = std::chrono::steady_clock; // устойчив к смене системного времени
 
 // Функция генерации вектора n размерности
-vector<double> randomVector(size_t n, double minVal = -1000.0, double maxVal = 1000.0) {
-    //random_device rd;
-    mt19937 gen(12345); // генератор Marsenne Twister
+vector<double> randomVector(size_t n, unsigned int seed = 12345, double minVal = -1000.0, double maxVal = 1000.0) {
+    mt19937 gen(seed); // генератор Marsenne Twister
     uniform_real_distribution<> dist(minVal, maxVal); // равномерное распределение
 
     vector<double> vec(n); // пустой вектор с указанием размерности
@@ -22,54 +22,39 @@ vector<double> randomVector(size_t n, double minVal = -1000.0, double maxVal = 1
     return vec;
 }
 
-// Функция вычисления скалярного произведения двух векторов
-double dotVectors(vector<double>& vec1, vector<double>& vec2) {
-    if (vec1.size() != vec2.size()) {
-        cout << "Ошибка: векторы разной размерности" << endl;
-        //throw invalid_argument("Векторы разной размерности");
-    }
-
-    double dot = 0.0;
-
-    for (size_t i = 0; i < vec1.size(); ++i) {
-        dot += vec1[i] * vec2[i];
-    }
-
-    return dot;
-}
-
-
-double measureExecTime(int size, vector<double>& vecA, vector<double>& vecB) {
-    //vector<double> a = randomVector(size);
-    //vector<double> b = randomVector(size);
-    #pragma omp barrier
-
-    auto t0 = clk::now(); // старт измерения времени выполнения
-    double result = dotVectors(vecA, vecB);
-    auto t1 = clk::now(); // окончание измерения времени
-
-    static volatile double sink; // защищаем от выкидывания
-    sink = result;
-
-    // возвращаем время в микросекундах (мкс)
-    return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-}
-
-void measureTimeForSizes(int size, int numMeasurements) {
+void measureTimeSeq(vector<double>& vecA, vector<double>& vecB, int numMeasurements) {
     double seqTotalTime = 0;
-    double parTotalTime = 0;
 
-    // Многократные замеры для последовательного алгоритма
+    double dot = 0.0;
+
     for (int i = 0; i < numMeasurements; ++i) {
-        vector<double> a = randomVector(size);
-        vector<double> b = randomVector(size);
-        seqTotalTime += measureExecTime(size, a, b);
+        dot = 0;
+        auto t0 = clk::now();
+
+        for (size_t i = 0; i < vecA.size(); ++i) {
+            dot += vecA[i] * vecB[i];
+        }
+
+        auto t1 = clk::now();
+        static volatile double sink; // защищаем от выкидывания
+        sink = dot;
+
+        double dt = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+        seqTotalTime += dt;
     }
 
-    vector<double> vec1;
-    vector<double> vec2;
-    double t0 = 0.0; // ОБЩЕЕ для всех потоков (время)
+    double seqAvgTime = seqTotalTime / numMeasurements;
+    cout << left << setw(25) << " | Последовательный:"
+        << left << seqAvgTime << " мкс; "
+        << "dot=" << dot << endl;
+}
+
+void measureTimePar(vector<double>& vecA, vector<double>& vecB, int numMeasurements) {
+    double parTotalTime = 0;
+    double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double dot = 0.0;
+    size_t size = vecA.size();
+
     #pragma omp parallel
     {
         // Многократные замеры для параллельного алгоритма
@@ -78,18 +63,19 @@ void measureTimeForSizes(int size, int numMeasurements) {
 
             #pragma omp single
             {
-                vec1 = randomVector(size);
-                vec2 = randomVector(size);
+                dot = 0;
                 t0 = omp_get_wtime();
             }
-            //#pragma omp barrier  // все увидят готовые vec1/vec2
 
-            #pragma omp for reduction(+:dot)
-            for (int i = 0; i < vec1.size(); ++i) {
-                dot += vec1[i] * vec2[i];
+            double local_dot = 0;
+            #pragma omp for
+            for (int i = 0; i < vecA.size(); ++i) {
+                local_dot += vecA[i] * vecB[i];
             }
 
-            //#pragma omp barrier
+            #pragma omp critical
+            dot += local_dot;
+
             #pragma omp single
             {
                 double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
@@ -99,15 +85,48 @@ void measureTimeForSizes(int size, int numMeasurements) {
         }
     }
 
-
-    // Среднее время для каждого из вариантов
-    double seqAvgTime = seqTotalTime / numMeasurements;
     double parAvgTime = parTotalTime / numMeasurements;
+    cout << left << setw(25) << " | Параллельный:"
+        << left << parAvgTime << " мкс; "
+        << "dot=" << dot << endl;
+}
 
-    // Вывод результатов
-    cout << "Размерность: " << size
-        << " | Последовательный: " << seqAvgTime << " мкс"
-        << " | Параллельный OpenMP: " << parAvgTime << " мкс\n";
+void measureTimeParOpt(vector<double>& vecA, vector<double>& vecB, int numMeasurements) {
+    double parOptTotalTime = 0;
+    double t0 = 0.0; // ОБЩЕЕ время для всех потоков
+    double dot = 0.0;
+    size_t size = vecA.size();
+
+    #pragma omp parallel
+    {
+        // Многократные замеры для параллельного алгоритма
+        for (int i = 0; i < numMeasurements; ++i) {
+        #pragma omp barrier
+
+            #pragma omp single
+            {
+                dot = 0;
+                t0 = omp_get_wtime();
+            }
+
+            #pragma omp for reduction(+:dot) schedule(static)
+            for (int i = 0; i < vecA.size(); ++i) {
+                dot += vecA[i] * vecB[i];
+            }
+
+            #pragma omp single
+            {
+                double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
+                parOptTotalTime += dt;
+                static volatile double sink; sink = dot; // не даём выкинуть
+            }
+        }
+    }
+
+    double parAvgTimeOpt = parOptTotalTime / numMeasurements;
+    cout << left << setw(25) << " | Пар.(Оптимизация):"
+        << left << parAvgTimeOpt << " мкс; "
+        << "dot=" << dot << endl;
 }
 
 int main() {
@@ -132,7 +151,21 @@ int main() {
         return 1;
     }
     size_t numMeasurements = static_cast<size_t>(temp);
-    measureTimeForSizes(n, numMeasurements);
+
+    random_device rd;
+
+    unsigned int seedA = rd();
+    cout << "Генератор вектора A (seed) = " << seedA << endl;
+    vector<double> vectorA = randomVector(n, seedA);
+
+    unsigned int seedB = rd();
+    cout << "Генератор вектора B (seed) = " << seedB << endl;
+    vector<double> vectorB = randomVector(n, seedB);
+
+    cout << endl << "Результаты " << numMeasurements << " прогонов" << " по алгоритмам:" << endl;
+    measureTimeSeq(vectorA,vectorB, numMeasurements);
+    measureTimePar(vectorA,vectorB, numMeasurements);
+    measureTimeParOpt(vectorA, vectorB, numMeasurements);
 
     return 0;
 }
