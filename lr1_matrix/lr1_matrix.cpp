@@ -25,57 +25,54 @@ vector<vector<double>> randomMatrix(size_t n, size_t m, unsigned int seed = 1234
     return matrix;
 }
 
+// вспомогательная функция нахождения размера матрицы
 pair<size_t, size_t> getMatrixSize(const vector<vector<double>>& matrix) {
     size_t rows = matrix.size();
     size_t cols = matrix.empty() ? 0 : matrix[0].size();
     return { rows, cols };
 }
 
-// Функция нахождения максимального элемента в матрице
-double getMaxMatrix(vector<vector<double>>& matrix) {
-    double maxv = -numeric_limits<double>::infinity();
-
-    int n = matrix.size();
-    int m = matrix[0].size();
-
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
-            if (matrix[i][j] > maxv) {
-                maxv = matrix[i][j];
-            }
-        }
-    }
-
-    return maxv;
-}
-
+// Метод подсчета времени выполнения последовательного выполнения
 void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
     double seqTotalTime = 0;
-    double result;
+    int n = matrix.size();
+    int m = matrix[0].size();
+    double maxv = -numeric_limits<double>::infinity();
+
     // Многократные замеры для последовательного алгоритма
     for (int i = 0; i < numMeasurements; ++i) {
+        maxv = 0; // сбрасываем перед каждым прогоном, чтобы заново искалось
         auto t0 = clk::now(); // старт измерения времени выполнения
-        result = getMaxMatrix(matrix);
+
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < m; j++) {
+                if (matrix[i][j] > maxv) {
+                    maxv = matrix[i][j];
+                }
+            }
+        }
+
         auto t1 = clk::now(); // окончание измерения времени
 
         static volatile double sink; // защищаем от выкидывания
-        sink = result;
+        sink = maxv;
 
         double dt = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
         seqTotalTime += dt;
     }
 
     double seqAvgTime = seqTotalTime / numMeasurements;
-    cout << " | Последовательный: " << seqAvgTime << " мкс; " << "max=" << result << endl;
+    cout << " | Последовательный: " << seqAvgTime << " мкс; " << "max=" << maxv << endl;
 }
 
+// Метод подсчета времени выполнения параллельного выполнения
 void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     double parTotalTime = 0;
     double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double maxv = -numeric_limits<double>::infinity();
     pair<size_t, size_t> size = getMatrixSize(matrix);
 
-    #pragma omp parallel
+    #pragma omp parallel shared(matrix, numMeasurements, parTotalTime, t0, maxv, size)
     {
         // Многократные замеры для параллельного алгоритма
         for (int i = 0; i < numMeasurements; ++i) {
@@ -113,13 +110,14 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     cout << " | Параллельный OpenMP: " << parAvgTime << " мкс; " << "max=" << maxv << endl;
 }
 
+// Метод подсчета времени выполнения параллельного с оптимизацией выполнения
 void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
     double parTotalTimeOpt = 0;
     double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double maxv = -numeric_limits<double>::infinity();
     pair<size_t, size_t> size = getMatrixSize(matrix);
 
-    #pragma omp parallel
+    #pragma omp parallel shared(matrix, numMeasurements, parTotalTimeOpt, t0, maxv, size)
     {
         // Многократные замеры для параллельного алгоритма
         for (int i = 0; i < numMeasurements; ++i) {
@@ -164,7 +162,6 @@ int main()
     omp_set_num_threads(omp_get_max_threads());
 
     int temp;
-
     cout << "Введите количество строк: ";
     if (!(cin >> temp) || temp <= 0) {
         cerr << "Ошибка: кол-во строк должно быть положительным числом" << endl;
