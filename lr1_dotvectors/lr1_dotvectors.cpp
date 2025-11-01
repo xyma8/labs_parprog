@@ -22,6 +22,7 @@ vector<double> randomVector(size_t n, unsigned int seed = 12345, double minVal =
     return vec;
 }
 
+// Метод подсчета времени выполнения последовательного выполнения
 void measureTimeSeq(vector<double>& vecA, vector<double>& vecB, int numMeasurements) {
     double seqTotalTime = 0;
 
@@ -49,13 +50,14 @@ void measureTimeSeq(vector<double>& vecA, vector<double>& vecB, int numMeasureme
         << "dot=" << dot << endl;
 }
 
+// Метод подсчета времени выполнения параллельного выполнения
 void measureTimePar(vector<double>& vecA, vector<double>& vecB, int numMeasurements) {
     double parTotalTime = 0;
     double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double dot = 0.0;
     size_t size = vecA.size();
 
-    #pragma omp parallel
+    #pragma omp parallel shared(vecA, vecB, numMeasurements, parTotalTime, t0, dot, size)
     {
         // Многократные замеры для параллельного алгоритма
         for (int i = 0; i < numMeasurements; ++i) {
@@ -91,13 +93,14 @@ void measureTimePar(vector<double>& vecA, vector<double>& vecB, int numMeasureme
         << "dot=" << dot << endl;
 }
 
+// Метод подсчета времени выполнения параллельного с оптимизацией выполнения
 void measureTimeParOpt(vector<double>& vecA, vector<double>& vecB, int numMeasurements) {
-    double parOptTotalTime = 0;
+    double parTotalTimeOpt = 0;
     double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double dot = 0.0;
     size_t size = vecA.size();
 
-    #pragma omp parallel
+    #pragma omp parallel shared(vecA, vecB, numMeasurements, parTotalTimeOpt, t0, dot, size)
     {
         // Многократные замеры для параллельного алгоритма
         for (int i = 0; i < numMeasurements; ++i) {
@@ -117,13 +120,13 @@ void measureTimeParOpt(vector<double>& vecA, vector<double>& vecB, int numMeasur
             #pragma omp single
             {
                 double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
-                parOptTotalTime += dt;
+                parTotalTimeOpt += dt;
                 static volatile double sink; sink = dot; // не даём выкинуть
             }
         }
     }
 
-    double parAvgTimeOpt = parOptTotalTime / numMeasurements;
+    double parAvgTimeOpt = parTotalTimeOpt / numMeasurements;
     cout << left << setw(25) << " | Пар.(Оптимизация):"
         << left << parAvgTimeOpt << " мкс; "
         << "dot=" << dot << endl;
@@ -136,8 +139,8 @@ int main() {
     // фиксируем число потоков, чтобы измерения были стабильны
     omp_set_dynamic(0);
     omp_set_num_threads(omp_get_max_threads());
-    int temp;
 
+    int temp;
     cout << "Введите размерность векторов: ";
     if (!(cin >> temp) || temp <= 0) {
         cerr << "Ошибка: размерность должна быть положительным числом" << endl;
