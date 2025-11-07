@@ -1,5 +1,5 @@
 ﻿#include <iostream>
-#include <Windows.h>
+//#include <Windows.h>
 #include <random>
 #include <chrono>
 #include <vector>
@@ -154,8 +154,8 @@ void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
 
 int main()
 {
-    SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
-    SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
+    //SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
+    //SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
 
     // фиксируем число потоков, чтобы измерения были стабильны
     omp_set_dynamic(0);
