@@ -66,40 +66,40 @@ void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
 // Метод подсчета времени выполнения параллельного выполнения
 void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     double parTotalTime = 0;
-    double t0 = 0.0; // ОБЩЕЕ время для всех потоков
+    //double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double sum = 0.0;
     pair<size_t, size_t> size = getMatrixSize(matrix);
 
-    #pragma omp parallel shared(matrix, numMeasurements, parTotalTime, t0, sum, size)
-    {
+    //#pragma omp parallel shared(matrix, numMeasurements, parTotalTime, t0, sum, size)
+    //{
         // Многократные замеры для параллельного алгоритма
         for (int i = 0; i < numMeasurements; ++i) {
-            #pragma omp barrier
+            //#pragma omp barrier
 
-            #pragma omp single
-            {
+            //#pragma omp single
+            //{
                 sum = 0.0;
-                t0 = omp_get_wtime();
-            }
+                double t0 = omp_get_wtime();
+            //}
 
-            double local_sum = 0.0;
-            #pragma omp for
+            //double local_sum = 0.0;
+            #pragma omp parallel for reduction(+:sum)
             for (size_t i = 0; i < matrix.size(); ++i) {
                 for (size_t j = 0; j < matrix[i].size(); ++j) {
-                    local_sum += matrix[i][j];
+                    sum += matrix[i][j];
                 }
             }
 
-            #pragma omp critical
-            if (local_sum) sum += local_sum;
+            //#pragma omp critical
+            //if (local_sum) sum += local_sum;
 
-            #pragma omp single
-            {
+            //#pragma omp single
+            //{
                 double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
                 parTotalTime += dt;
                 static volatile double sink; sink = sum; // не даём выкинуть
-            }
-        }
+            //}
+        //}
     }
 
     double parAvgTime = parTotalTime / numMeasurements;
@@ -109,23 +109,23 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
 // Метод подсчета времени выполнения параллельного с оптимизацией выполнения
 void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
     double parTotalTimeOpt = 0;
-    double t0 = 0.0; // ОБЩЕЕ время для всех потоков
+    //double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double sum = 0.0;
     pair<size_t, size_t> size = getMatrixSize(matrix);
 
-    #pragma omp parallel shared(matrix, numMeasurements, parTotalTimeOpt, t0, sum, size)
-    {
+    //#pragma omp parallel shared(matrix, numMeasurements, parTotalTimeOpt, sum, size)
+    //{
         // Многократные замеры для параллельного алгоритма
         for (int i = 0; i < numMeasurements; ++i) {
-            #pragma omp barrier
+            //#pragma omp barrier
 
-            #pragma omp single
-            {
+            //#pragma omp single
+            //{
                 sum = 0.0;
-                t0 = omp_get_wtime();
-            }
+                double t0 = omp_get_wtime();
+            //}
 
-            #pragma omp for reduction(+:sum) schedule(static)
+            #pragma omp parallel for reduction(+:sum) schedule(static)
             for (size_t i = 0; i < matrix.size(); ++i) {
                 #pragma omp simd reduction(+:sum)
                 for (size_t j = 0; j < matrix[i].size(); ++j) {
@@ -134,14 +134,14 @@ void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
             }
 
 
-            #pragma omp single
-            {
+            //#pragma omp single
+            //{
                 double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
                 parTotalTimeOpt += dt;
                 static volatile double sink; sink = sum; // не даём выкинуть
-            }
+            //}
         }
-    }
+    //}
     
     double parAvgTimeOpt = parTotalTimeOpt / numMeasurements;
     cout << " | Параллельный OpenMP оптимизированный: " << parAvgTimeOpt << " мкс; " << "max=" << sum << endl;
