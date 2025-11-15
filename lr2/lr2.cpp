@@ -67,7 +67,6 @@ void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
 void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     double parTotalTime = 0;
     double sum = 0.0;
-    pair<size_t, size_t> size = getMatrixSize(matrix);
 
     // Многократные замеры для параллельного алгоритма
     for (int i = 0; i < numMeasurements; ++i) {
@@ -94,7 +93,6 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
 void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
     double parTotalTimeOpt = 0;
     double sum = 0.0;
-    pair<size_t, size_t> size = getMatrixSize(matrix);
 
     // Многократные замеры для параллельного алгоритма
     for (int i = 0; i < numMeasurements; ++i) {
@@ -115,7 +113,7 @@ void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
     }
     
     double parAvgTimeOpt = parTotalTimeOpt / numMeasurements;
-    cout << " | Параллельный OpenMP оптимизированный: " << parAvgTimeOpt << " мкс; " << "max=" << sum << endl;
+    cout << " | Параллельный OpenMP оптимизированный: " << parAvgTimeOpt << " мкс; " << "sum=" << sum << endl;
 }
 
 int main()
