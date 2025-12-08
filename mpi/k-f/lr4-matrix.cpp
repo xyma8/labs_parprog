@@ -53,7 +53,7 @@ void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
     cout << " | Последовательный: " << seqAvgTime << " мкс; max=" << maxv << endl;
 }
 
-// 2. Параллельный MPI
+// 2. Параллельный MPI (без оптимизации)
 void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     int world_rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -92,7 +92,7 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     }
 }
 
-// 3. Параллельный MPI оптимизированный
+// 3. Параллельный MPI с оптимизацией
 void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
     int world_rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);

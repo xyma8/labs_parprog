@@ -68,42 +68,26 @@ void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
 // Метод подсчета времени выполнения параллельного выполнения
 void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     double parTotalTime = 0;
-    double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double maxv = -numeric_limits<double>::infinity();
     pair<size_t, size_t> size = getMatrixSize(matrix);
 
-    #pragma omp parallel shared(matrix, numMeasurements, parTotalTime, t0, maxv, size)
-    {
-        // Многократные замеры для параллельного алгоритма
-        for (int i = 0; i < numMeasurements; ++i) {
-            #pragma omp barrier
+    // Многократные замеры для параллельного алгоритма
+    for (int i = 0; i < numMeasurements; ++i) {
+        maxv = -numeric_limits<double>::infinity();
+        double t0 = omp_get_wtime();
 
-            #pragma omp single
-            {
-                maxv = -numeric_limits<double>::infinity();
-                t0 = omp_get_wtime();
-            }
-
-            double local_max = maxv;
-            #pragma omp for
-            for (int i = 0; i < size.first; i++) {
-                for (int j = 0; j < size.second; j++) {
-                    if (matrix[i][j] > local_max) {
-                        local_max = matrix[i][j];
-                    }
+        #pragma omp parallel for reduction(max:maxv)
+        for (int i = 0; i < size.first; i++) {
+            for (int j = 0; j < size.second; j++) {
+                if (matrix[i][j] > maxv) {
+                    maxv = matrix[i][j];
                 }
             }
-
-            #pragma omp critical
-            if (local_max > maxv) maxv = local_max;
-
-            #pragma omp single
-            {
-                double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
-                parTotalTime += dt;
-                static volatile double sink; sink = maxv; // не даём выкинуть
-            }
         }
+
+        double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
+        parTotalTime += dt;
+        static volatile double sink; sink = maxv; // не даём выкинуть
     }
 
     double parAvgTime = parTotalTime / numMeasurements;
@@ -113,39 +97,28 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
 // Метод подсчета времени выполнения параллельного с оптимизацией выполнения
 void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
     double parTotalTimeOpt = 0;
-    double t0 = 0.0; // ОБЩЕЕ время для всех потоков
     double maxv = -numeric_limits<double>::infinity();
     pair<size_t, size_t> size = getMatrixSize(matrix);
 
-    #pragma omp parallel shared(matrix, numMeasurements, parTotalTimeOpt, t0, maxv, size)
-    {
-        // Многократные замеры для параллельного алгоритма
-        for (int i = 0; i < numMeasurements; ++i) {
-            #pragma omp barrier
 
-            #pragma omp single
-            {
-                maxv = -numeric_limits<double>::infinity();
-                t0 = omp_get_wtime();
-            }
+    // Многократные замеры для параллельного алгоритма
+    for (int i = 0; i < numMeasurements; ++i) {
+        maxv = -numeric_limits<double>::infinity();
+        double t0 = omp_get_wtime();
 
-            #pragma omp for reduction(max:maxv) schedule(static)
-            for (int i = 0; i < size.first; i++) {
-                #pragma omp simd reduction(max:maxv)
-                for (int j = 0; j < size.second; j++) {
-                    if (matrix[i][j] > maxv) {
-                        maxv = matrix[i][j];
-                    }
+        #pragma omp parallel for reduction(max:maxv) schedule(static)
+        for (int i = 0; i < size.first; i++) {
+            #pragma omp simd reduction(max:maxv)
+            for (int j = 0; j < size.second; j++) {
+                if (matrix[i][j] > maxv) {
+                    maxv = matrix[i][j];
                 }
             }
-
-            #pragma omp single
-            {
-                double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
-                parTotalTimeOpt += dt;
-                static volatile double sink; sink = maxv; // не даём выкинуть
-            }
         }
+
+        double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
+        parTotalTimeOpt += dt;
+        static volatile double sink; sink = maxv; // не даём выкинуть
     }
     
     double parAvgTimeOpt = parTotalTimeOpt / numMeasurements;
@@ -192,5 +165,4 @@ int main()
     measureTimeParOpt(matrix, numMeasurements);
 
     return 0;
-
 }
