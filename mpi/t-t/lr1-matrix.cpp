@@ -9,7 +9,7 @@ using clk = std::chrono::steady_clock;
 
 
 // Функция генерации матриц n*m размерности
-vector<vector<double>> randomMatrix(size_t n, size_t m, unsigned int seed = 12345, double minVal = -10000.0, double maxVal = 10000.0) {
+vector<vector<double>> randomMatrix(size_t n, size_t m, unsigned int seed = 54321, double minVal = -10000.0, double maxVal = 10000.0) {
     mt19937 gen(seed); // генератор Marsenne Twister
     cout << "Генератор матрицы (seed) = " << seed << endl;
     normal_distribution<> dist(minVal, maxVal);
@@ -32,7 +32,7 @@ pair<size_t, size_t> getMatrixSize(const vector<vector<double>>& matrix) {
     return { rows, cols };
 }
 
-// Метод подсчета времени выполнения последовательного выполнения
+// Последовательное выполнение
 void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
     double seqTotalTime = 0;
     int n = matrix.size();
@@ -40,7 +40,7 @@ void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
     double maxv = -numeric_limits<double>::infinity();
 
     // Многократные замеры для последовательного алгоритма
-    for (int i = 0; i < numMeasurements; ++i) {
+    for (int i = 0; i < 1; ++i) {
         maxv = 0; // сбрасываем перед каждым прогоном, чтобы заново искалось
         auto t0 = clk::now(); // старт измерения времени выполнения
 
@@ -54,8 +54,8 @@ void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
 
         auto t1 = clk::now(); // окончание измерения времени
 
-        static volatile double sink; // защищаем от выкидывания
-        sink = maxv;
+        //static volatile double sink; // защищаем от выкидывания
+        //sink = maxv;
 
         double dt = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
         seqTotalTime += dt;
@@ -65,7 +65,7 @@ void measureTimeSeq(vector<vector<double>>& matrix, int numMeasurements) {
     cout << " | Последовательный: " << seqAvgTime << " мкс; " << "max=" << maxv << endl;
 }
 
-// Метод подсчета времени выполнения параллельного выполнения
+// MPI Точка-Точка. Параллельное выполнение
 void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -82,7 +82,6 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     double totalTime = 0.0;
     double globalMax = -numeric_limits<double>::infinity();
 
-    //MPI_Barrier(MPI_COMM_WORLD);
     for (int r = 0; r < numMeasurements; ++r) {
         double start = MPI_Wtime();
 
@@ -116,7 +115,7 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
         cout << " | Параллельный MPI: " << avgTime << " мкс; " << "max=" << globalMax << endl;
 }
 
-void measureTimeParOptimized(vector<vector<double>>& matrix, int numMeasurements) {
+void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -174,47 +173,6 @@ void measureTimeParOptimized(vector<vector<double>>& matrix, int numMeasurements
         cout << " | Параллельный MPI (оптимизированный): " << avgTime << " мкс; " << "max=" << globalMax << endl;
 }
 
-void measureTimeParCollective(vector<vector<double>>& matrix, int numMeasurements) {
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    int n = matrix.size();
-    int m = matrix[0].size();
-
-    int rowsPerProc = n / size;
-    int remainder = n % size;
-    int startRow = rank * rowsPerProc + min(rank, remainder);
-    int endRow = startRow + rowsPerProc + (rank < remainder ? 1 : 0);
-
-    double totalTime = 0.0;
-    double globalMax = -numeric_limits<double>::infinity();
-
-    for (int r = 0; r < numMeasurements; ++r) {
-        //MPI_Barrier(MPI_COMM_WORLD); // синхронизация перед стартом
-        double start = MPI_Wtime();
-
-        // Локальный максимум
-        double localMax = -numeric_limits<double>::infinity();
-        for (int i = startRow; i < endRow; ++i)
-            for (int j = 0; j < m; ++j)
-                if (matrix[i][j] > localMax)
-                    localMax = matrix[i][j];
-
-        // Коллективная операция: редукция для нахождения глобального максимума
-        MPI_Reduce(&localMax, &globalMax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-        //MPI_Barrier(MPI_COMM_WORLD); // все должны закончить, прежде чем новый прогон
-        double end = MPI_Wtime();
-        totalTime += (end - start) * 1e6; // микросекунды
-    }
-
-    double avgTime = totalTime / numMeasurements;
-    if (rank == 0)
-        cout << " | Параллельный MPI (коллективные функции): "
-             << avgTime << " мкс; max=" << globalMax << endl;
-}
-
 
 int main(int argc, char** argv)
 {
@@ -243,7 +201,7 @@ int main(int argc, char** argv)
         numMeasurements = temp;
 
         random_device rd;
-        matrix = randomMatrix(n, m, rd());
+        matrix = randomMatrix(n, m);
     }
 
     // Передаем значения переменных всем процессам
@@ -258,21 +216,18 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < n; ++i)
         MPI_Bcast(matrix[i].data(), m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    
+    // Вычисления
     if (rank==0) {
         cout <<endl << "Результаты " << numMeasurements << " прогонов" << " по алгоритмам:" << endl;
-        measureTimeSeq(matrix, numMeasurements);
+        measureTimeSeq(matrix, 1);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
     measureTimePar(matrix, numMeasurements);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    measureTimeParOptimized(matrix, numMeasurements);
+    measureTimeParOpt(matrix, numMeasurements);
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    measureTimeParCollective(matrix, numMeasurements);
-    
     MPI_Finalize();
     return 0;
 }
