@@ -74,40 +74,38 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     int n = matrix.size();
     int m = matrix[0].size();
 
+    int rowsPerProc = n / size;
+    int remainder = n % size;
+    int startRow = rank * rowsPerProc + min(rank, remainder);
+    int endRow = startRow + rowsPerProc + (rank < remainder ? 1 : 0);
+
     double totalTime = 0.0;
     double globalMax = -numeric_limits<double>::infinity();
 
+    //MPI_Barrier(MPI_COMM_WORLD);
     for (int r = 0; r < numMeasurements; ++r) {
-        MPI_Barrier(MPI_COMM_WORLD);
         double start = MPI_Wtime();
-
-        int rowsPerProc = n / size;
-        int remainder = n % size;
-
-        // Размер куска для каждого процесса
-        int startRow = rank * rowsPerProc + min(rank, remainder);
-        int endRow = startRow + rowsPerProc + (rank < remainder ? 1 : 0);
 
         // Вычисляем локальный максимум
         double localMax = -numeric_limits<double>::infinity();
         for (int i = startRow; i < endRow; ++i)
-            for (double val : matrix[i])
-                if (val > localMax)
-                    localMax = val;
-
+            for (int j = 0; j < m; ++j)
+                if (matrix[i][j] > localMax)
+                    localMax = matrix[i][j];
+        
+        // Собираем данные через точка-точка
         if (rank != 0) {
             MPI_Send(&localMax, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
         } else {
+            double recvVal;
             globalMax = localMax;
             for (int src = 1; src < size; ++src) {
-                double recvVal;
                 MPI_Recv(&recvVal, 1, MPI_DOUBLE, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 if (recvVal > globalMax)
                     globalMax = recvVal;
             }
         }
-
-        MPI_Barrier(MPI_COMM_WORLD);
+        
         double end = MPI_Wtime();
         totalTime += (end - start) * 1e6; // в микросекундах
     }
@@ -126,95 +124,97 @@ void measureTimeParOptimized(vector<vector<double>>& matrix, int numMeasurements
     int n = matrix.size();
     int m = matrix[0].size();
 
-    // Распределяем строки
     int rowsPerProc = n / size;
     int remainder = n % size;
     int startRow = rank * rowsPerProc + min(rank, remainder);
     int endRow = startRow + rowsPerProc + (rank < remainder ? 1 : 0);
-    int localRows = endRow - startRow;
-
-    vector<double> localData(localRows * m);
-    if (rank == 0) {
-        // Рассылка кусков вручную (точка-точка)
-        for (int dest = 1; dest < size; ++dest) {
-            int s = dest * rowsPerProc + min(dest, remainder);
-            int e = s + rowsPerProc + (dest < remainder ? 1 : 0);
-            int count = (e - s) * m;
-            MPI_Send(matrix[s].data(), count, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
-        }
-        // Копируем свой кусок
-        for (int i = 0; i < localRows; ++i)
-            copy(matrix[startRow + i].begin(), matrix[startRow + i].end(),
-                 localData.begin() + i * m);
-    } else {
-        MPI_Recv(localData.data(), localRows * m, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
 
     double totalTime = 0.0;
-    double localMax = -numeric_limits<double>::infinity();
+    double globalMax = -numeric_limits<double>::infinity();
+
     for (int r = 0; r < numMeasurements; ++r) {
-        MPI_Barrier(MPI_COMM_WORLD);
+        //MPI_Barrier(MPI_COMM_WORLD);
         double start = MPI_Wtime();
 
-        // Локальный максимум
-        localMax = -numeric_limits<double>::infinity();
-        for (double val : localData)
-            if (val > localMax) localMax = val;
-
-        // Двоичное дерево обменов (точка-точка)
+        // Вычисляем локальный максимум
+        double localMax = -numeric_limits<double>::infinity();
+        for (int i = startRow; i < endRow; ++i)
+            for (int j = 0; j < m; ++j)
+                if (matrix[i][j] > localMax)
+                    localMax = matrix[i][j];
+        
+        // Оптимизированный обмен — двоичное дерево (логарифмическая сложность)
         double recvVal;
         for (int step = 1; step < size; step *= 2) {
             if (rank % (2 * step) == 0) {
-                int src = rank + step;
-                if (src < size) {
-                    MPI_Recv(&recvVal, 1, MPI_DOUBLE, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                    if (recvVal > localMax) localMax = recvVal;
+                int partner = rank + step;
+                if (partner < size) {
+                    MPI_Recv(&recvVal, 1, MPI_DOUBLE, partner, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    if (recvVal > localMax)
+                        localMax = recvVal;
                 }
             } else {
-                int dest = rank - step;
-                MPI_Send(&localMax, 1, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
+                int partner = rank - step;
+                MPI_Send(&localMax, 1, MPI_DOUBLE, partner, 0, MPI_COMM_WORLD);
                 break;
             }
         }
 
+        if (rank == 0)
+            globalMax = localMax;
+
+        //MPI_Barrier(MPI_COMM_WORLD);
         double end = MPI_Wtime();
-        totalTime += (end - start) * 1e6;
+        totalTime += (end - start) * 1e6; // в микросекундах
     }
 
-    if (rank == 0) {
-        double avgTime = totalTime / numMeasurements;
-        cout << " | Оптимизированный MPI (точка-точка): " << avgTime << " мкс; max=" << fixed << localMax << endl;
-    }
+    double avgTime = totalTime / numMeasurements;
+
+    if (rank == 0)
+        cout << " | Параллельный MPI (оптимизированный): " << avgTime << " мкс; " << "max=" << globalMax << endl;
 }
 
+void measureTimeParCollective(vector<vector<double>>& matrix, int numMeasurements) {
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-// Метод подсчета времени выполнения параллельного с оптимизацией выполнения
-void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
-    double parTotalTimeOpt = 0;
-    double maxv = -numeric_limits<double>::infinity();
-    pair<size_t, size_t> size = getMatrixSize(matrix);
+    int n = matrix.size();
+    int m = matrix[0].size();
 
-    // Многократные замеры для параллельного алгоритма
-    for (int i = 0; i < numMeasurements; ++i) {
-        maxv = -numeric_limits<double>::infinity();
-        //double t0 = omp_get_wtime();
+    int rowsPerProc = n / size;
+    int remainder = n % size;
+    int startRow = rank * rowsPerProc + min(rank, remainder);
+    int endRow = startRow + rowsPerProc + (rank < remainder ? 1 : 0);
 
-        for (int i = 0; i < size.first; i++) {
-            for (int j = 0; j < size.second; j++) {
-                if (matrix[i][j] > maxv) {
-                    maxv = matrix[i][j];
-                }
-            }
-        }
+    double totalTime = 0.0;
+    double globalMax = -numeric_limits<double>::infinity();
 
-        //double dt = (omp_get_wtime() - t0) * 1e6; // умножаем для микросекунд
-        //parTotalTimeOpt += dt;
-        //static volatile double sink; sink = maxv; // не даём выкинуть
+    for (int r = 0; r < numMeasurements; ++r) {
+        //MPI_Barrier(MPI_COMM_WORLD); // синхронизация перед стартом
+        double start = MPI_Wtime();
+
+        // Локальный максимум
+        double localMax = -numeric_limits<double>::infinity();
+        for (int i = startRow; i < endRow; ++i)
+            for (int j = 0; j < m; ++j)
+                if (matrix[i][j] > localMax)
+                    localMax = matrix[i][j];
+
+        // Коллективная операция: редукция для нахождения глобального максимума
+        MPI_Reduce(&localMax, &globalMax, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        //MPI_Barrier(MPI_COMM_WORLD); // все должны закончить, прежде чем новый прогон
+        double end = MPI_Wtime();
+        totalTime += (end - start) * 1e6; // микросекунды
     }
-    
-    double parAvgTimeOpt = parTotalTimeOpt / numMeasurements;
-    cout << " | Параллельный OpenMP оптимизированный: " << parAvgTimeOpt << " мкс; " << "max=" << maxv << endl;
+
+    double avgTime = totalTime / numMeasurements;
+    if (rank == 0)
+        cout << " | Параллельный MPI (коллективные функции): "
+             << avgTime << " мкс; max=" << globalMax << endl;
 }
+
 
 int main(int argc, char** argv)
 {
@@ -264,9 +264,15 @@ int main(int argc, char** argv)
         measureTimeSeq(matrix, numMeasurements);
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
     measureTimePar(matrix, numMeasurements);
 
+    MPI_Barrier(MPI_COMM_WORLD);
     measureTimeParOptimized(matrix, numMeasurements);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    measureTimeParCollective(matrix, numMeasurements);
+    
     MPI_Finalize();
     return 0;
 }
