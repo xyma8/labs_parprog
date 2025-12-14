@@ -65,13 +65,8 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int n = matrix.size();
-    int m = matrix[0].size();
-
-    int rowsPerProc = n / size;
-    int remainder = n % size;
-    int startRow = rank * rowsPerProc + min(rank, remainder);
-    int endRow = startRow + rowsPerProc + (rank < remainder ? 1 : 0);
+    const int localN = (int)matrix.size();
+    const int m = (localN>0? (int)matrix[0].size() : 0);
 
     double totalTime = 0.0;
     double globalMax = -numeric_limits<double>::infinity();
@@ -81,7 +76,7 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
 
         // Локальный максимум
         double localMax = -numeric_limits<double>::infinity();
-        for (int i = startRow; i < endRow; ++i)
+        for (int i = 0; i < localN; ++i)
             for (int j = 0; j < m; ++j)
                 if (matrix[i][j] > localMax)
                     localMax = matrix[i][j];
@@ -105,13 +100,8 @@ void measureTimeParOpt(const vector<vector<double>>& matrix, int numMeasurements
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int n = matrix.size();
-    int m = matrix[0].size();
-
-    int rowsPerProc = n / size;
-    int remainder = n % size;
-    int startRow = rank * rowsPerProc + min(rank, remainder);
-    int endRow = startRow + rowsPerProc + (rank < remainder ? 1 : 0);
+    const int localN = (int)matrix.size();
+    const int m = (localN>0? (int)matrix[0].size() : 0);
 
     double totalTime = 0.0;
     double globalMax = -numeric_limits<double>::infinity();
@@ -123,7 +113,7 @@ void measureTimeParOpt(const vector<vector<double>>& matrix, int numMeasurements
 
         // Локальный максимум
         double localMax = -numeric_limits<double>::infinity();
-        for (int i = startRow; i < endRow; ++i)
+        for (int i = 0; i < localN; ++i)
             for (int j = 0; j < m; ++j)
                 if (matrix[i][j] > localMax)
                     localMax = matrix[i][j];
@@ -148,8 +138,10 @@ void measureTimeParOpt(const vector<vector<double>>& matrix, int numMeasurements
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
-    int rank;
+    
+    int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     size_t n = 0, m = 0, numMeasurements = 0;
     vector<vector<double>> matrix;
@@ -177,13 +169,65 @@ int main(int argc, char** argv) {
     MPI_Bcast(&m, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
     MPI_Bcast(&numMeasurements, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
-    // Рассылаем матрицу всем (каждый процессу нужна копия, тк небольшие накладные)
-    if (rank != 0)
-        matrix.assign(n, vector<double>(m, 0.0));
+    // ------------------------------
+    // Распределение матрицы по процессам
+    // ------------------------------
+    // Вычисляем распределение строк: у каждого процессa numRows, и startRow
+    int base = n / size;
+    int rem = n % size;
+    int localRows = base + (rank < rem ? 1 : 0);
+    int startRow = rank * base + min(rank, rem);
 
-    for (size_t i = 0; i < n; ++i)
-        MPI_Bcast(matrix[i].data(), m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // Подготовим локальный блок (каждый процесс хранит только его строки)
+    vector<vector<double>> localBlock(localRows, vector<double>(m, 0.0));
 
+    // Разослать блоки: root упакует всю матрицу в плоский буфер и посылает суб-блоки
+    if (rank == 0) {
+        // делаем плоский буфер для удобной отправки смежных участков
+        vector<double> flat;
+        flat.reserve((size_t)n * m);
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < m; ++j)
+                flat.push_back(matrix[i][j]);
+
+        // Отправляем каждому процессу его блок (включая нулевой — просто копируем)
+        for (int p = 0; p < size; ++p) {
+            int pRows = base + (p < rem ? 1 : 0);
+            int pStart = p * base + min(p, rem);
+            int count = pRows * m;
+            if (p == 0) {
+                // копируем в локальный блок
+                for (int i = 0; i < pRows; ++i)
+                    for (int j = 0; j < m; ++j)
+                        localBlock[i][j] = flat[(pStart + i) * m + j];
+            } else {
+                // отправляем contiguous участок из flat
+                if (count > 0)
+                    MPI_Send(flat.data() + (pStart * m), count, MPI_DOUBLE, p, 0, MPI_COMM_WORLD);
+                else {
+                    // можно отправить message с count=0 (необязательно)
+                    MPI_Send(nullptr, 0, MPI_DOUBLE, p, 0, MPI_COMM_WORLD);
+                }
+            }
+        }
+    } else {
+        // Рабочие получают свой плоский блок и разбирают в localBlock
+        int recvCount = localRows * m;
+        if (recvCount > 0) {
+            vector<double> buf(recvCount);
+            MPI_Recv(buf.data(), recvCount, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            for (int i = 0; i < localRows; ++i)
+                for (int j = 0; j < m; ++j)
+                    localBlock[i][j] = buf[i * m + j];
+        } else {
+            // никаких строк — localBlock пустой (size 0)
+            localBlock.clear();
+        }
+    }
+
+    // ------------------------------
+    // Вычисления
+    // ------------------------------
     
     if (rank==0) {
         cout <<endl << "Результаты " << numMeasurements << " прогонов" << " по алгоритмам:" << endl;
@@ -191,10 +235,10 @@ int main(int argc, char** argv) {
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    measureTimePar(matrix, numMeasurements);
+    measureTimePar(localBlock, numMeasurements);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    measureTimeParOpt(matrix, numMeasurements);
+    measureTimeParOpt(localBlock, numMeasurements);
     
     MPI_Finalize();
     return 0;
