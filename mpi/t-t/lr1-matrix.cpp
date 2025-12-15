@@ -1,5 +1,5 @@
 #include <iostream>
-//#include <Windows.h>
+#include <Windows.h>
 #include <random>
 #include <chrono>
 #include <vector>
@@ -110,6 +110,7 @@ void measureTimePar(vector<vector<double>>& matrix, int numMeasurements) {
         cout << " | Параллельный MPI: " << avgTime << " мкс; " << "max=" << globalMax << endl;
 }
 
+// MPI Точка-Точка. Параллельное выполнение с оптимизацией
 void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -151,7 +152,6 @@ void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
         if (rank == 0)
             globalMax = localMax;
 
-        //MPI_Barrier(MPI_COMM_WORLD);
         double end = MPI_Wtime();
         totalTime += (end - start) * 1e6; // в микросекундах
     }
@@ -165,8 +165,8 @@ void measureTimeParOpt(vector<vector<double>>& matrix, int numMeasurements) {
 
 int main(int argc, char** argv)
 {
-    //SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
-    //SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
+    SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
+    SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
     MPI_Init(&argc, &argv);
 
     int rank, size;
@@ -258,7 +258,6 @@ int main(int argc, char** argv)
     // ------------------------------
     // Вычисления
     // ------------------------------
-
     if (rank==0) {
         cout <<endl << "Результаты " << numMeasurements << " прогонов" << " по алгоритмам:" << endl;
         measureTimeSeq(matrix, 1);

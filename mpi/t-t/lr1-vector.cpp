@@ -1,5 +1,5 @@
 #include <mpi.h>
-//#include <Windows.h>
+#include <Windows.h>
 #include <iostream>
 #include <vector>
 #include <random>
@@ -46,7 +46,7 @@ void measureTimeSeq(vector<double>& vecA, vector<double>& vecB, int numMeasureme
         << "dot=" << dot << endl;
 }
 
-// Метод подсчета времени выполнения параллельного выполнения
+// Параллельное выполнение точка-точка
 void measureTimePar(vector<double>& vecA, vector<double>& vecB, int numMeasurements) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -117,7 +117,7 @@ void measureTimePar(vector<double>& vecA, vector<double>& vecB, int numMeasureme
         cout << " | Параллельный MPI: " << avgTime << " мкс; " << "dot=" << globalDot << endl;
 }
 
-// Метод подсчета времени выполнения параллельного с оптимизацией выполнения
+// Параллельное выполнение точка-точка с оптимизацией выполнения
 void measureTimeParOpt(vector<double>& vecA, vector<double>& vecB, int numMeasurements) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -195,8 +195,8 @@ void measureTimeParOpt(vector<double>& vecA, vector<double>& vecB, int numMeasur
 }
 
 int main(int argc, char** argv) {
-    //SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
-    //SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
+    SetConsoleCP(1251);// установка кодовой страницы win-cp 1251 в поток ввода
+    SetConsoleOutputCP(1251); // установка кодовой страницы win-cp 1251 в поток вывода
 
     MPI_Init(&argc, &argv);
 
